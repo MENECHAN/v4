@@ -5,7 +5,9 @@ async function runMigrations() {
     try {
         console.log('🔄 Running database migrations...');
 
-        
+
+
+
         await db.run(`
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -15,7 +17,7 @@ async function runMigrations() {
             )
         `);
 
-        
+
         await db.run(`
             CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +29,7 @@ async function runMigrations() {
             )
         `);
 
-        
+
         await db.run(`
             CREATE TABLE IF NOT EXISTS friendships (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +44,7 @@ async function runMigrations() {
             )
         `);
 
-        
+
         await db.run(`
             CREATE TABLE IF NOT EXISTS carts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +59,7 @@ async function runMigrations() {
             )
         `);
 
-        
+
         await db.run(`
             CREATE TABLE IF NOT EXISTS cart_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,7 +74,7 @@ async function runMigrations() {
             )
         `);
 
-        
+
         await db.run(`
             CREATE TABLE IF NOT EXISTS orders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,13 +92,36 @@ async function runMigrations() {
             )
         `);
 
+        await db.run(`
+            CREATE TABLE IF NOT EXISTS order_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                cart_id INTEGER,
+                items_data TEXT,
+                total_rp INTEGER NOT NULL DEFAULT 0,
+                total_price REAL NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'PENDING_CHECKOUT',
+                payment_proof_url TEXT,
+                order_channel_id TEXT,
+                selected_account_id INTEGER,
+                processed_by_admin_id TEXT,
+                debited_from_account_id INTEGER,
+                admin_notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Criar índices se necessário
+        await db.run(`CREATE INDEX IF NOT EXISTS idx_order_logs_user_id ON order_logs(user_id)`);
+        await db.run(`CREATE INDEX IF NOT EXISTS idx_order_logs_status ON order_logs(status)`);
+
         console.log('✅ Database migrations completed successfully!');
     } catch (error) {
         console.error('❌ Error running migrations:', error);
         throw error;
     }
 }
-
 
 async function createIndexes() {
     try {
@@ -121,7 +146,7 @@ async function createIndexes() {
         for (const indexSql of indexes) {
             await db.run(indexSql);
         }
-        
+
         console.log('✅ Database indexes created/verified');
     } catch (error) {
         console.error('❌ Error creating indexes:', error);
@@ -134,7 +159,7 @@ async function createTriggers() {
     try {
         console.log('🔄 Creating database triggers...');
 
-        
+
         await db.run(`
             CREATE TRIGGER IF NOT EXISTS update_carts_timestamp 
             AFTER UPDATE ON carts
@@ -167,7 +192,7 @@ async function runMigrationsWithIndexes() {
 async function checkDatabaseIntegrity() {
     try {
         console.log('🔍 Checking database integrity...');
-        
+
         const result = await db.get('PRAGMA integrity_check');
         if (result.integrity_check === 'ok') {
             console.log('✅ Database integrity check passed');
@@ -186,10 +211,10 @@ async function checkDatabaseIntegrity() {
 async function getDatabaseStats() {
     try {
         const stats = {};
-        
-        
+
+
         const tables = ['users', 'accounts', 'friendships', 'carts', 'cart_items', 'orders'];
-        
+
         for (const table of tables) {
             try {
                 const result = await db.get(`SELECT COUNT(*) as count FROM ${table}`);
@@ -199,7 +224,7 @@ async function getDatabaseStats() {
             }
         }
 
-        
+
         try {
             const sizeResult = await db.get('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()');
             stats.database_size_bytes = sizeResult.size;
@@ -224,20 +249,20 @@ async function cleanupOldData(daysOld = 30) {
         cutoffDate.setDate(cutoffDate.getDate() - daysOld);
         const cutoffISO = cutoffDate.toISOString();
 
-        
+
         const cartResult = await db.run(
             'DELETE FROM carts WHERE status = ? AND created_at < ?',
             ['cancelled', cutoffISO]
         );
 
-        
+
         const orderResult = await db.run(
             'DELETE FROM orders WHERE status = ? AND created_at < ?',
             ['completed', cutoffISO]
         );
 
         console.log(`✅ Cleanup completed: ${cartResult.changes} carts, ${orderResult.changes} orders removed`);
-        
+
         return {
             cartsRemoved: cartResult.changes,
             ordersRemoved: orderResult.changes

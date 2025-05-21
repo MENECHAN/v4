@@ -559,16 +559,18 @@ async function handleConfirmRegion(interaction, region, originalButtonId) {
 
 async function handleOpenCartWithSelectedRegion(interaction, region) {
     try {
-        
+        // Primeiro, garantir que o usuário existe
+        const User = require('../models/User');
         const user = await User.findOrCreate(interaction.user.id, interaction.user.username);
         console.log(`[DEBUG] User found/created:`, user);
 
-        
-        let cart = await Cart.findActiveByUserId(interaction.user.id);
+        // Buscar carrinho ativo pelo ID do banco de dados do usuário
+        const Cart = require('../models/Cart');
+        let cart = await Cart.findActiveByUserId(user.id);
         console.log(`[DEBUG] Active cart found:`, cart ? `ID ${cart.id}` : 'None');
 
         if (cart) {
-            
+            // Verificar se o canal do carrinho ainda existe
             const existingChannel = interaction.guild.channels.cache.get(cart.ticket_channel_id);
             if (existingChannel) {
                 return await interaction.followUp({
@@ -576,20 +578,22 @@ async function handleOpenCartWithSelectedRegion(interaction, region) {
                     ephemeral: true
                 });
             } else {
-                
+                // Se o canal não existir mais, excluir o carrinho
                 await Cart.delete(cart.id);
                 cart = null;
             }
         }
 
-        
+        // Criar canal de ticket
+        const TicketService = require('../services/ticketService');
         const ticketChannel = await TicketService.createTicket(interaction.guild, interaction.user, region);
 
-        
-        cart = await Cart.create(interaction.user.id, ticketChannel.id, region);
+        // Criar carrinho com o ID do banco de dados do usuário
+        cart = await Cart.create(user.id, ticketChannel.id, region);
         console.log(`[DEBUG] New cart created with ID: ${cart.id} and region: ${region}`);
 
-        
+        // Enviar APENAS o embed do carrinho - remova a linha de boas-vindas para evitar duplicação
+        const CartService = require('../services/cartService');
         await CartService.sendCartEmbed(ticketChannel, cart);
 
         await interaction.followUp({

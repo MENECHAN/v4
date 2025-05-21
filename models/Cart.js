@@ -14,36 +14,26 @@ class Cart {
         }
     }
 
-    static async findActiveByUserId(userId) {
-        try {
-            console.log(`[DEBUG Cart.findActiveByUserId] Searching for user: ${userId}`);
+static async findActiveByUserId(userId) {
+    try {
+        console.log(`[DEBUG Cart.findActiveByUserId] Searching for user: ${userId}`);
 
-            
-            let query = 'SELECT * FROM carts WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1';
-            let cart = await db.get(query, [userId.toString(), 'active']);
+        // Assume userId is already the database ID
+        let query = 'SELECT * FROM carts WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1';
+        let cart = await db.get(query, [userId, 'active']);
 
-            if (cart) {
-                console.log(`[DEBUG Cart.findActiveByUserId] Found active cart directly: ${cart.id}`);
-                return cart;
-            }
-
-            
-            query = `
-            SELECT c.* FROM carts c
-            JOIN users u ON c.user_id = u.discord_id
-            WHERE u.discord_id = ? AND c.status = ?
-            ORDER BY c.created_at DESC LIMIT 1
-        `;
-            cart = await db.get(query, [userId.toString(), 'active']);
-
-            console.log(`[DEBUG Cart.findActiveByUserId] Final result:`, cart ? `Cart ID ${cart.id}` : 'No active cart found');
+        if (cart) {
+            console.log(`[DEBUG Cart.findActiveByUserId] Found active cart directly: ${cart.id}`);
             return cart;
-
-        } catch (error) {
-            console.error('Error finding active cart:', error);
-            throw error;
         }
+
+        console.log(`[DEBUG Cart.findActiveByUserId] Final result:`, cart ? `Cart ID ${cart.id}` : 'No active cart found');
+        return cart;
+    } catch (error) {
+        console.error('Error finding active cart:', error);
+        throw error;
     }
+}
 
     static async findByChannelId(channelId) {
         try {
@@ -55,28 +45,40 @@ class Cart {
         }
     }
 
-    static async create(userId, channelId, region = null) {
-        try {
-            console.log(`[DEBUG Cart.create] Creating cart for user: ${userId}, channel: ${channelId}, region: ${region}`);
+static async create(userId, channelId, region = null) {
+    try {
+        console.log(`[DEBUG Cart.create] Creating cart for user: ${userId}, channel: ${channelId}, region: ${region}`);
 
-            
-            const query = `
+        // If userId is a Discord ID string, you need to look up the actual user ID
+        let userDbId = userId;
+        
+        // Check if userId is a Discord ID (string)
+        if (typeof userId === 'string') {
+            const User = require('../models/User');
+            const user = await User.findByDiscordId(userId);
+            if (!user) {
+                throw new Error('User not found in database');
+            }
+            userDbId = user.id; // Use the database ID instead of Discord ID
+        }
+
+        const query = `
             INSERT INTO carts (user_id, ticket_channel_id, status, total_rp, total_price, region, created_at) 
             VALUES (?, ?, 'active', 0, 0.00, ?, CURRENT_TIMESTAMP)
         `;
 
-            const result = await db.run(query, [userId, channelId, region]);
-            console.log(`[DEBUG Cart.create] Cart created with ID: ${result.lastID}`);
+        const result = await db.run(query, [userDbId, channelId, region]);
+        console.log(`[DEBUG Cart.create] Cart created with ID: ${result.lastID}`);
 
-            const newCart = await this.findById(result.lastID);
-            console.log(`[DEBUG Cart.create] Retrieved new cart:`, newCart);
+        const newCart = await this.findById(result.lastID);
+        console.log(`[DEBUG Cart.create] Retrieved new cart:`, newCart);
 
-            return newCart;
-        } catch (error) {
-            console.error('Error creating cart:', error);
-            throw error;
-        }
+        return newCart;
+    } catch (error) {
+        console.error('Error creating cart:', error);
+        throw error;
     }
+}
 
     static async updateStatus(id, status) {
         try {
@@ -93,14 +95,14 @@ class Cart {
         try {
             const cart = await this.findById(cartId);
             if (!cart || !cart.region) {
-                
+
                 return await Account.findAvailable();
             }
 
-            
+
             const allAccounts = await Account.findAvailable();
 
-            
+
             return allAccounts.filter(account => account.region === cart.region);
         } catch (error) {
             console.error('Error getting accounts by cart region:', error);
@@ -110,21 +112,21 @@ class Cart {
 
     static async updateTotals(cartId, totalRP = null, totalPrice = null) {
         try {
-            
+
             if (totalRP === null || totalPrice === null) {
                 const items = await this.getItems(cartId);
                 totalRP = items.reduce((sum, item) => sum + item.skin_price, 0);
                 totalPrice = totalRP * 0.01;
             }
 
-            
+
             try {
-                
+
                 const query = 'UPDATE carts SET total_rp = ?, total_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
                 const result = await db.run(query, [totalRP, totalPrice, cartId]);
                 return result.changes > 0;
             } catch (updateError) {
-                
+
                 console.log(`[DEBUG Cart.updateTotals] Trying without updated_at for cart ${cartId}`);
                 const query = 'UPDATE carts SET total_rp = ?, total_price = ? WHERE id = ?';
                 const result = await db.run(query, [totalRP, totalPrice, cartId]);
@@ -138,10 +140,10 @@ class Cart {
 
     static async delete(id) {
         try {
-            
+
             await db.run('DELETE FROM cart_items WHERE cart_id = ?', [id]);
 
-            
+
             const query = 'DELETE FROM carts WHERE id = ?';
             const result = await db.run(query, [id]);
             return result.changes > 0;
@@ -159,7 +161,7 @@ class Cart {
         `;
             const result = await db.run(query, [cartId, skinName, skinPrice, skinImageUrl, category, originalItemId]);
 
-            
+
             await this.updateTotals(cartId);
 
             return result.lastID;
@@ -171,7 +173,7 @@ class Cart {
 
     static async removeItem(itemId) {
         try {
-            
+
             const item = await db.get('SELECT cart_id FROM cart_items WHERE id = ?', [itemId]);
 
             if (!item) {
@@ -182,7 +184,7 @@ class Cart {
             const result = await db.run(query, [itemId]);
 
             if (result.changes > 0) {
-                
+
                 await this.updateTotals(item.cart_id);
                 return true;
             }
@@ -209,7 +211,7 @@ class Cart {
             const query = 'DELETE FROM cart_items WHERE cart_id = ?';
             const result = await db.run(query, [cartId]);
 
-            
+
             await this.updateTotals(cartId, 0, 0);
 
             return result.changes;
@@ -333,7 +335,7 @@ class Cart {
         }
     }
 
-    
+
     static async getItemsByCategory(cartId) {
         try {
             const query = `
@@ -369,13 +371,13 @@ class Cart {
             };
 
             if (config && config.orderSettings) {
-                
+
                 if (config.orderSettings.maxItemsPerOrder && items.length >= config.orderSettings.maxItemsPerOrder) {
                     validation.valid = false;
                     validation.errors.push(`Limite máximo de ${config.orderSettings.maxItemsPerOrder} itens por carrinho`);
                 }
 
-                
+
                 if (config.orderSettings.maxOrderValue) {
                     const totalPrice = items.reduce((sum, item) => sum + (item.skin_price * 0.01), 0);
                     if (totalPrice > config.orderSettings.maxOrderValue) {

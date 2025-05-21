@@ -65,33 +65,90 @@ class TicketService {
             console.error('Error creating ticket:', error);
             throw error;
         }
+            return ticketChannel; // Return without sending welcome message
     }
 
-    static async sendWelcomeMessage(channel, user, region = null) {
-        try {
-            const regionText = region ? ` (Região: ${region})` : '';
+static async sendWelcomeMessage(channel, user, region = null, cartId = null) {
+    try {
+        const regionText = region ? ` (Região: ${region})` : '';
 
-            const embed = new EmbedBuilder()
-                .setTitle(`🎮 Bem-vindo ao seu carrinho${regionText}, ${user.displayName}!`)
-                .setDescription(`Este é seu canal privado para compras. Aqui você pode:\n\n` +
-                    `• Adicionar skins ao carrinho\n` +
-                    `• Remover itens\n` +
-                    `• Finalizar sua compra\n` +
-                    `• Receber suporte\n\n` +
-                    `${region ? `🌎 **Região selecionada: ${region}**\n\n` : ''}` +
-                    `Use os botões abaixo para gerenciar seu carrinho.`)
-                .setColor('#5865f2')
-                .setThumbnail(user.displayAvatarURL())
-                .setTimestamp();
+        const embed = new EmbedBuilder()
+            .setTitle(`🎮 Bem-vindo ao seu carrinho${regionText}, ${user.displayName}!`)
+            .setDescription(`Este é seu canal privado para compras. Aqui você pode:\n\n` +
+                `• Adicionar skins ao carrinho\n` +
+                `• Remover itens\n` +
+                `• Finalizar sua compra\n` +
+                `• Receber suporte\n\n` +
+                `${region ? `🌎 **Região selecionada: ${region}**\n\n` : ''}` +
+                `Use os botões abaixo para gerenciar seu carrinho.`)
+            .setColor('#5865f2')
+            .setThumbnail(user.displayAvatarURL())
+            .setTimestamp();
 
+        // Se não temos um cartId, tentar encontrá-lo pelo canal
+        if (!cartId) {
+            try {
+                const Cart = require('../models/Cart');
+                const cart = await Cart.findByChannelId(channel.id);
+                if (cart) {
+                    cartId = cart.id;
+                    console.log(`[DEBUG] Found cart ID ${cartId} for welcome message`);
+                }
+            } catch (cartError) {
+                console.error('Error finding cart for welcome message:', cartError);
+            }
+        }
+
+        // Se ainda não temos cartId, enviar apenas o embed sem botões
+        if (!cartId) {
+            console.log(`[DEBUG] No cart ID for welcome message, sending without buttons`);
             await channel.send({
                 content: `${user}`,
                 embeds: [embed]
             });
-        } catch (error) {
-            console.error('Error sending welcome message:', error);
+            return;
         }
+
+        // Criar os componentes dos botões
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        
+        // Criar os botões de ação
+        const row1 = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`add_item_${cartId}`)
+                    .setLabel('➕ Add Item')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`remove_item_${cartId}`)
+                    .setLabel('➖ Remove Item')
+                    .setStyle(ButtonStyle.Danger)
+                    .setDisabled(true), // Desativado inicialmente, pois o carrinho está vazio
+                new ButtonBuilder()
+                    .setCustomId(`close_cart_${cartId}`)
+                    .setLabel('🔒 Close Cart')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+            
+        // Botão de checkout (inicialmente desativado, pois o carrinho está vazio)
+        const row2 = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`checkout_${cartId}`)
+                    .setLabel('💳 Checkout')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(true)
+            );
+
+        await channel.send({
+            content: `${user}`,
+            embeds: [embed],
+            components: [row1, row2]
+        });
+    } catch (error) {
+        console.error('Error sending welcome message:', error);
     }
+}
 
     static async closeTicket(channel, reason = 'Ticket fechado automaticamente') {
         try {

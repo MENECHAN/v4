@@ -210,35 +210,31 @@ class OrderLog {
     }
 
 
-    static async create(userId, cartId, itemsData, totalRp, totalPrice, status = 'PENDING_CHECKOUT', paymentProofUrl = null, orderChannelId = null) {
+static async create(userId, cartId, itemsData, totalRp, totalPrice, status = 'PENDING_CHECKOUT', paymentProofUrl = null, orderChannelId = null) {
+    try {
+        console.log(`[DEBUG OrderLog.create] Criando pedido para usuário ${userId}, carrinho ${cartId}`);
+        
         const query = `INSERT INTO order_logs (user_id, cart_id, items_data, total_rp, total_price, status, payment_proof_url, order_channel_id, created_at, updated_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
-        try {
-            
-            const result = await new Promise((resolve, reject) => {
-                db.run(query, [
-                    userId,
-                    cartId,
-                    JSON.stringify(itemsData),
-                    totalRp,
-                    totalPrice,
-                    status,
-                    paymentProofUrl,
-                    orderChannelId
-                ], function (err) { 
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve({ insertId: this.lastID }); 
-                    }
-                });
-            });
-            return result.insertId;
-        } catch (error) {
-            console.error("Erro em OrderLog.create:", error);
-            throw error;
-        }
+        
+        const result = await db.run(query, [
+            userId,
+            cartId,
+            JSON.stringify(itemsData),
+            totalRp,
+            totalPrice,
+            status,
+            paymentProofUrl,
+            orderChannelId
+        ]);
+        
+        console.log(`[DEBUG OrderLog.create] Pedido criado com ID: ${result.lastID}`);
+        return result.lastID;
+    } catch (error) {
+        console.error(`[ERROR OrderLog.create] Erro ao criar pedido:`, error);
+        throw error;
     }
+}
 
     static async findActiveOrderByChannelId(channelId, status) {
         const query = 'SELECT * FROM order_logs WHERE order_channel_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1';
