@@ -4,7 +4,7 @@ const {
     ButtonBuilder,
     ButtonStyle,
     StringSelectMenuBuilder,
-    StringSelectMenuOptionBuilder  
+    StringSelectMenuOptionBuilder
 } = require('discord.js');
 const OrderLog = require('../models/OrderLog');
 const Account = require('../models/Account');
@@ -26,7 +26,7 @@ class OrderService {
                 return;
             }
 
-            
+
             let userTag = order.user_id;
             try {
                 const discordUser = await client.users.fetch(order.user_id);
@@ -36,7 +36,7 @@ class OrderService {
                 console.error(`[ERROR OrderService] Error fetching user ${order.user_id}:`, userError);
             }
 
-            
+
             let itemsDescription = 'Nenhum item encontrado';
             let itemCount = 0;
 
@@ -45,7 +45,7 @@ class OrderService {
             if (order.items_data) {
                 let parsedItems;
 
-                
+
                 if (typeof order.items_data === 'string') {
                     try {
                         parsedItems = JSON.parse(order.items_data);
@@ -59,7 +59,7 @@ class OrderService {
                     console.log(`[DEBUG OrderService] Items already parsed:`, parsedItems);
                 }
 
-                
+
                 if (Array.isArray(parsedItems) && parsedItems.length > 0) {
                     itemCount = parsedItems.length;
                     itemsDescription = parsedItems
@@ -74,7 +74,7 @@ class OrderService {
                 }
             }
 
-            
+
             const approvalEmbed = new EmbedBuilder()
                 .setTitle(`🧾 Comprovante para Aprovação`)
                 .setDescription(`**Pedido ID:** ${order.id}\n**Status:** Aguardando aprovação manual`)
@@ -249,7 +249,7 @@ class OrderService {
                 });
             }
 
-            
+
             const Account = require('../models/Account');
             const eligibleAccounts = [];
             const ineligibleAccounts = [];
@@ -260,7 +260,7 @@ class OrderService {
 
                 if (!account) continue;
 
-                
+
                 const now = new Date();
                 const addedAt = new Date(friendship.added_at);
                 const daysSince = Math.floor((now - addedAt) / (1000 * 60 * 60 * 24));
@@ -286,7 +286,7 @@ class OrderService {
 
             console.log(`[DEBUG] Found ${eligibleAccounts.length} eligible accounts, ${ineligibleAccounts.length} ineligible`);
 
-            
+
             if (eligibleAccounts.length === 0) {
                 let reasonsText = '';
 
@@ -331,14 +331,14 @@ class OrderService {
                 return;
             }
 
-            
+
             await OrderLog.updateStatus(orderId, 'AWAITING_ACCOUNT_SELECTION');
             console.log(`[DEBUG] Order status updated to AWAITING_ACCOUNT_SELECTION`);
 
-            
+
             console.log(`[DEBUG] Creating selection interface for ${eligibleAccounts.length} accounts`);
 
-            
+
             if (eligibleAccounts.length === 1) {
                 console.log(`[DEBUG] Only 1 eligible account, processing directly...`);
                 const account = eligibleAccounts[0];
@@ -384,10 +384,10 @@ class OrderService {
                 return;
             }
 
-            
+
             console.log(`[DEBUG] Multiple eligible accounts (${eligibleAccounts.length}), creating selection interface...`);
 
-            
+
             const rows = [];
             let currentRow = new ActionRowBuilder();
             let buttonCount = 0;
@@ -402,7 +402,7 @@ class OrderService {
                 currentRow.addComponents(button);
                 buttonCount++;
 
-                
+
                 if (buttonCount === 5 || index === eligibleAccounts.length - 1) {
                     rows.push(currentRow);
                     currentRow = new ActionRowBuilder();
@@ -410,12 +410,12 @@ class OrderService {
                 }
             });
 
-            
+
             if (rows.length > 5) {
                 rows.splice(5);
             }
 
-            
+
             const selectionEmbed = new EmbedBuilder()
                 .setTitle(`✅ Pagamento Aprovado - Selecionar Conta`)
                 .setDescription(
@@ -439,7 +439,7 @@ class OrderService {
                 .setFooter({ text: `Admin: ${interaction.user.tag} | Pedido ID: ${orderId}` })
                 .setTimestamp();
 
-            
+
             if (ineligibleAccounts.length > 0) {
                 let ineligibleText = ineligibleAccounts.map(acc => {
                     const timeIssue = acc.days_since_added < minDays;
@@ -452,7 +452,7 @@ class OrderService {
                     return `**${acc.nickname}** - ${status}`;
                 }).join('\n');
 
-                
+
                 if (ineligibleText.length > 1024) {
                     ineligibleText = ineligibleText.substring(0, 1021) + '...';
                 }
@@ -466,18 +466,18 @@ class OrderService {
                 ]);
             }
 
-            
+
             const ClientMessageManager = require('../services/clientMessageManager');
 
-            
-            
+
+
             await interaction.editReply({
                 content: null,
                 embeds: [selectionEmbed],
                 components: rows
             });
 
-            
+
             if (order.order_channel_id) {
                 try {
                     const orderChannel = await interaction.client.channels.fetch(order.order_channel_id);
@@ -545,10 +545,10 @@ class OrderService {
                 });
             }
 
-            
+
             await OrderLog.updateStatus(orderId, 'REJECTED');
 
-            
+
             try {
                 const orderChannel = await interaction.client.channels.fetch(order.order_channel_id);
                 if (orderChannel) {
@@ -572,7 +572,7 @@ class OrderService {
                 console.error('Error notifying user:', error);
             }
 
-            
+
             const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                 .setColor('#ed4245')
                 .setTitle('❌ Pedido Rejeitado')
@@ -627,7 +627,7 @@ class OrderService {
                 });
             }
 
-            // ⭐ DEBITAR RP DA CONTA
+            // ⭐ 1. DEBITAR RP DA CONTA
             const newBalance = account.rp_amount - order.total_rp;
             console.log(`[DEBUG OrderService.processAccountSelection] Debiting RP: ${account.rp_amount} - ${order.total_rp} = ${newBalance}`);
 
@@ -642,16 +642,59 @@ class OrderService {
                 });
             }
 
-            console.log(`[DEBUG OrderService.processAccountSelection] Account update result: true`);
+            // ⭐ 2. ATUALIZAR STATUS DO PEDIDO PARA COMPLETED
+            console.log(`[DEBUG] Finalizing order ${orderId} - updating status to COMPLETED...`);
 
-            console.log(`[DEBUG] Attempting to finalize order ${orderId}...`);
-
-            // ⭐ PULAR FINALIZAÇÃO NO BANCO E IR DIRETO PARA UI
-            console.log(`[DEBUG] Skipping database finalization, updating UI directly...`);
-
-            // ⭐ ATUALIZAR EMBED IMEDIATAMENTE
             try {
-                console.log(`[DEBUG] Updating original embed...`);
+                // Atualizar o pedido com todas as informações finais
+                const db = require('../database/connection');
+                const updateQuery = `
+                UPDATE order_logs 
+                SET status = 'COMPLETED',
+                    selected_account_id = ?,
+                    debited_from_account_id = ?,
+                    processed_by_admin_id = ?,
+                    admin_notes = 'Processado automaticamente via interface admin',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `;
+
+                const updateOrderResult = await db.run(updateQuery, [
+                    accountId,
+                    accountId,
+                    interaction.user.id,
+                    orderId
+                ]);
+
+                console.log(`[DEBUG] Order update result: ${updateOrderResult.changes} rows affected`);
+
+                if (updateOrderResult.changes === 0) {
+                    console.error(`[ERROR] Failed to update order ${orderId} to COMPLETED status`);
+                    throw new Error('Failed to update order status');
+                }
+
+                console.log(`[DEBUG] ✅ Order ${orderId} successfully marked as COMPLETED`);
+
+            } catch (statusUpdateError) {
+                console.error(`[ERROR] Failed to update order status:`, statusUpdateError);
+
+                // Tentar rollback do RP se possível
+                try {
+                    await Account.updateRP(accountId, account.rp_amount);
+                    console.log(`[DEBUG] Rolled back RP debit due to status update failure`);
+                } catch (rollbackError) {
+                    console.error(`[ERROR] Failed to rollback RP:`, rollbackError);
+                }
+
+                return await interaction.followUp({
+                    content: '❌ Erro ao finalizar pedido. RP foi restaurado.',
+                    ephemeral: true
+                });
+            }
+
+            // ⭐ 3. ATUALIZAR EMBED ADMINISTRATIVO
+            try {
+                console.log(`[DEBUG] Updating admin embed...`);
 
                 const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                     .setColor('#57f287')
@@ -662,41 +705,41 @@ class OrderService {
                         { name: '📅 Processado em', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
                         { name: '💰 RP Debitado', value: `${order.total_rp.toLocaleString()} RP`, inline: true },
                         { name: '📊 Saldo anterior', value: `${account.rp_amount.toLocaleString()} RP`, inline: true },
-                        { name: '📊 Novo saldo', value: `${newBalance.toLocaleString()} RP`, inline: true }
+                        { name: '📊 Novo saldo', value: `${newBalance.toLocaleString()} RP`, inline: true },
+                        { name: '✅ Status Final', value: '**COMPLETED**', inline: false }
                     ])
-                    .setFooter({ text: `Pedido #${orderId} - FINALIZADO` });
+                    .setFooter({ text: `Pedido #${orderId} - FINALIZADO COM SUCESSO` });
 
                 await interaction.update({
                     embeds: [originalEmbed],
-                    components: [] // Remove todos os botões
+                    components: []
                 });
 
-                console.log(`[DEBUG] Original embed updated successfully`);
+                console.log(`[DEBUG] Admin embed updated successfully`);
             } catch (embedError) {
-                console.error(`[ERROR] Embed update failed:`, embedError);
+                console.error(`[ERROR] Admin embed update failed:`, embedError);
             }
 
-            // ⭐ CONFIRMAÇÃO RÁPIDA AO ADMIN
+            // ⭐ 4. BUSCAR INFORMAÇÕES DA AMIZADE PARA RESUMO
+            let userFriendship = null;
             try {
-                await interaction.followUp({
-                    content: `✅ **Processamento concluído!**\n\n` +
-                        `📦 Pedido #${orderId} finalizado\n` +
-                        `🎮 Conta: ${account.nickname}\n` +
-                        `💰 RP debitado: ${order.total_rp.toLocaleString()}\n` +
-                        `📊 Novo saldo: ${newBalance.toLocaleString()}`,
-                    ephemeral: true
-                });
-                console.log(`[DEBUG] Admin confirmation sent`);
-            } catch (followUpError) {
-                console.error(`[ERROR] FollowUp failed:`, followUpError);
+                const User = require('../models/User');
+                const Friendship = require('../models/Friendship');
+
+                const user = await User.findByDiscordId(order.user_id);
+                if (user) {
+                    userFriendship = await Friendship.findByUserAndAccount(user.id, accountId);
+                    console.log(`[DEBUG] User friendship found:`, userFriendship ? 'Yes' : 'No');
+                }
+            } catch (friendshipError) {
+                console.error(`[ERROR] Error finding friendship:`, friendshipError);
             }
 
-            console.log(`[DEBUG] Core processing completed - embed updated and admin notified`);
-            // ⭐ CRIAR RESUMO DO PEDIDO PARA CANAL DE PEDIDOS FINALIZADOS
+            // ⭐ 5. CRIAR RESUMO PARA CANAL DE PEDIDOS FINALIZADOS
             try {
-                console.log(`[DEBUG OrderService.processAccountSelection] Creating order summary...`);
+                console.log(`[DEBUG OrderService.processAccountSelection] Creating order completion summary...`);
 
-                // Processar itens para mostrar na lista
+                // Processar itens
                 let itemsList = 'Itens não disponíveis';
                 let itemCount = 0;
 
@@ -730,7 +773,8 @@ class OrderService {
                     console.error(`[ERROR] Error fetching client info:`, userError);
                 }
 
-                // Criar embed para canal de pedidos finalizados
+                // Embed para canal de pedidos finalizados
+                const { EmbedBuilder } = require('discord.js');
                 const orderCompletedEmbed = new EmbedBuilder()
                     .setTitle('🎉 Pedido Finalizado com Sucesso')
                     .setDescription(`**Pedido #${orderId}** foi processado e concluído!`)
@@ -741,8 +785,10 @@ class OrderService {
                             inline: true
                         },
                         {
-                            name: '🎮 Destino',
-                            value: `(${friendship.lol_nickname}#${friendship.lol_tag})`,
+                            name: '🎮 Conta de Destino',
+                            value: userFriendship ?
+                                `**${account.nickname}**\nNick do cliente: ${userFriendship.lol_nickname}#${userFriendship.lol_tag}` :
+                                `**${account.nickname}**\nDados da amizade não encontrados`,
                             inline: true
                         },
                         {
@@ -758,6 +804,7 @@ class OrderService {
                         {
                             name: '📊 Detalhes da Transação',
                             value:
+                                `**Conta utilizada:** ${account.nickname}\n` +
                                 `**Saldo anterior:** ${account.rp_amount.toLocaleString()} RP\n` +
                                 `**RP debitado:** ${order.total_rp.toLocaleString()} RP\n` +
                                 `**Novo saldo:** ${newBalance.toLocaleString()} RP`,
@@ -782,7 +829,7 @@ class OrderService {
                     .setColor('#57f287')
                     .setThumbnail(interaction.client.user.displayAvatarURL())
                     .setFooter({
-                        text: `Sistema PawStore | Pedido ID: ${orderId}`,
+                        text: `Sistema PawStore | Pedido ID: ${orderId} | Status: COMPLETED`,
                         iconURL: interaction.guild.iconURL()
                     })
                     .setTimestamp();
@@ -792,27 +839,24 @@ class OrderService {
                 const ordersChannel = await interaction.client.channels.fetch(ordersChannelId);
 
                 if (ordersChannel && ordersChannel.isTextBased()) {
-                    const sentMessage = await ordersChannel.send({
+                    await ordersChannel.send({
                         content: `🎯 **Novo pedido finalizado** - Cliente: ${clientMention}`,
                         embeds: [orderCompletedEmbed]
                     });
-                    console.log(`[DEBUG OrderService.processAccountSelection] Order summary sent to orders channel`);
-                } else {
-                    console.error(`[ERROR OrderService.processAccountSelection] Orders channel not found or not accessible`);
+                    console.log(`[DEBUG] Order completion summary sent to orders channel`);
                 }
 
             } catch (orderSummaryError) {
-                console.error(`[ERROR OrderService.processAccountSelection] Error creating order summary:`, orderSummaryError);
+                console.error(`[ERROR] Error creating order completion summary:`, orderSummaryError);
             }
 
-            // ⭐ NOTIFICAR CLIENTE NO CANAL DO PEDIDO
+            // ⭐ 6. NOTIFICAR CLIENTE NO CANAL DO PEDIDO
             try {
-                console.log(`[DEBUG OrderService.processAccountSelection] Notifying client...`);
+                console.log(`[DEBUG] Notifying client of completion...`);
 
                 const orderChannel = await interaction.client.channels.fetch(order.order_channel_id);
                 if (orderChannel && orderChannel.isTextBased()) {
-                    // Processar itens para o cliente
-                    let clientItemsList = 'Seus itens foram processados com sucesso!';
+                    let clientItemsList = 'Seus itens foram entregues com sucesso!';
                     if (order.items_data) {
                         let parsedItems;
                         if (typeof order.items_data === 'string') {
@@ -831,23 +875,11 @@ class OrderService {
                         }
                     }
 
-                    let userFriendship = null;
-                    try {
-                        const user = await User.findByDiscordId(order.user_id);
-                        if (user) {
-                            userFriendship = await Friendship.findByUserAndAccount(user.id, accountId);
-                        }
-                        console.log(`[DEBUG] User friendship found:`, userFriendship);
-                    } catch (friendshipError) {
-                        console.error(`[ERROR] Error finding friendship:`, friendshipError);
-                    }
-
-                    // ⭐ CORRIGIR O EMBED PARA CLIENTE
                     const clientEmbed = new EmbedBuilder()
-                        .setTitle('🎉 Pedido Aprovado - Será Entregue em Breve!')
+                        .setTitle('🎉 Pedido Entregue com Sucesso!')
                         .setDescription(
-                            `Seu pedido **#${orderId}** foi aprovado e será processado!\n\n` +
-                            `✨ **Os itens serão entregues na sua conta em breve.**`
+                            `Seu pedido **#${orderId}** foi entregue!\n\n` +
+                            `✨ **Os itens foram enviados para sua conta.**`
                         )
                         .addFields([
                             {
@@ -858,29 +890,33 @@ class OrderService {
                                 inline: true
                             },
                             {
-                                name: '💰 Total aprovado',
+                                name: '💰 Total entregue',
                                 value: `💎 ${order.total_rp.toLocaleString()} RP\n💵 €${order.total_price.toFixed(2)}`,
                                 inline: true
                             },
                             {
-                                name: '📦 Itens aprovados',
+                                name: '📦 Itens entregues',
                                 value: clientItemsList,
                                 inline: false
                             },
                             {
-                                name: '⏳ Próximos passos',
+                                name: '✅ Status',
+                                value: '**CONCLUÍDO** - Itens entregues com sucesso!',
+                                inline: false
+                            },
+                            {
+                                name: '🎮 Próximos passos',
                                 value:
-                                    `1. **Aguarde a entrega** - processamento em andamento\n` +
-                                    `2. **Faça login** na conta **${account.nickname}**\n` +
-                                    `3. **Verifique sua coleção** após a entrega\n` +
-                                    `4. **Entre em contato** se houver problemas\n\n` +
-                                    `💡 *Os itens serão entregues automaticamente.*`,
+                                    `1. **Faça login** na conta **${account.nickname}**\n` +
+                                    `2. **Verifique sua coleção** - os itens já estão lá!\n` +
+                                    `3. **Aproveite suas novas skins!** 🎨\n\n` +
+                                    `💚 Obrigado por usar nossos serviços!`,
                                 inline: false
                             }
                         ])
-                        .setColor('#faa61a') // Cor amarela para "em processamento"
+                        .setColor('#57f287')
                         .setThumbnail(interaction.client.user.displayAvatarURL())
-                        .setFooter({ text: `Pedido aprovado! | ID: ${orderId}` })
+                        .setFooter({ text: `Pedido entregue! | ID: ${orderId}` })
                         .setTimestamp();
 
                     await orderChannel.send({
@@ -888,38 +924,37 @@ class OrderService {
                         embeds: [clientEmbed]
                     });
 
-                    console.log(`[DEBUG OrderService.processAccountSelection] Client notification sent successfully`);
-                } else {
-                    console.error(`[ERROR OrderService.processAccountSelection] Order channel not found`);
+                    console.log(`[DEBUG] Client notification sent successfully`);
                 }
 
             } catch (clientError) {
-                console.error(`[ERROR OrderService.processAccountSelection] Error notifying client:`, clientError);
+                console.error(`[ERROR] Error notifying client:`, clientError);
             }
 
-            console.log(`[DEBUG OrderService.processAccountSelection] Process completed successfully - Order #${orderId} finalized`);
-
-            // Final success message to admin (optional)
+            // ⭐ 7. CONFIRMAÇÃO FINAL PARA ADMIN
             try {
                 await interaction.followUp({
-                    content: `✅ **Processamento concluído!**\n\n` +
-                        `📦 Pedido #${orderId} foi finalizado com sucesso\n` +
-                        `🎮 Cliente notificado\n` +
-                        `📋 Resumo enviado para o canal de pedidos\n` +
-                        `💰 RP debitado: ${order.total_rp.toLocaleString()}`,
+                    content: `✅ **Pedido #${orderId} FINALIZADO com sucesso!**\n\n` +
+                        `🎮 Conta: ${account.nickname}\n` +
+                        `💰 RP debitado: ${order.total_rp.toLocaleString()}\n` +
+                        `📊 Novo saldo: ${newBalance.toLocaleString()}\n` +
+                        `📋 Status: **COMPLETED**\n` +
+                        `👤 Cliente e canal notificados`,
                     ephemeral: true
                 });
             } catch (followUpError) {
                 console.log(`[DEBUG] Could not send follow-up message:`, followUpError.message);
             }
 
+            console.log(`[DEBUG OrderService.processAccountSelection] ✅ Process completed successfully - Order #${orderId} FINALIZED with COMPLETED status`);
+
         } catch (error) {
-            console.error('[ERROR OrderService.processAccountSelection] Error:', error);
+            console.error('[ERROR OrderService.processAccountSelection] Critical error:', error);
             console.error('[ERROR OrderService.processAccountSelection] Stack:', error.stack);
 
             try {
                 await interaction.followUp({
-                    content: `❌ Erro ao processar seleção: ${error.message}`,
+                    content: `❌ Erro crítico ao processar: ${error.message}`,
                     ephemeral: true
                 });
             } catch (followUpError) {

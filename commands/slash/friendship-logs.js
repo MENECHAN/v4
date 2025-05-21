@@ -41,8 +41,17 @@ module.exports = {
                 .setDescription('Pedidos de amizade pendentes')
         ),
 
-    async execute(interaction) {
-        
+async execute(interaction) {
+    try {
+        // Verificar se o interaction tem member e se está em um servidor
+        if (!interaction.member || !interaction.guild) {
+            return await interaction.reply({
+                content: '❌ Este comando só pode ser usado em um servidor.',
+                ephemeral: true
+            });
+        }
+
+        // Verificar permissões do admin
         if (!interaction.member.roles.cache.has(config.adminRoleId)) {
             return await interaction.reply({
                 content: '❌ Você não tem permissão para usar este comando.',
@@ -52,21 +61,53 @@ module.exports = {
 
         const subcommand = interaction.options.getSubcommand();
 
-        switch (subcommand) {
-            case 'stats':
-                await handleFriendshipStats(interaction);
-                break;
-            case 'recent':
-                await handleRecentFriendships(interaction);
-                break;
-            case 'user':
-                await handleUserFriendships(interaction);
-                break;
-            case 'pending':
-                await handlePendingFriendships(interaction);
-                break;
+        try {
+            switch (subcommand) {
+                case 'stats':
+                    await handleFriendshipStats(interaction);
+                    break;
+                case 'recent':
+                    await handleRecentFriendships(interaction);
+                    break;
+                case 'user':
+                    await handleUserFriendships(interaction);
+                    break;
+                case 'pending':
+                    await handlePendingFriendships(interaction);
+                    break;
+                default:
+                    await interaction.reply({
+                        content: '❌ Subcomando não reconhecido.',
+                        ephemeral: true
+                    });
+            }
+        } catch (subcommandError) {
+            console.error(`Error in friendship-logs subcommand ${subcommand}:`, subcommandError);
+            
+            const errorMessage = interaction.deferred ? 
+                await interaction.editReply({ 
+                    content: '❌ Erro ao processar comando: ' + subcommandError.message
+                }) :
+                await interaction.reply({
+                    content: '❌ Erro ao processar comando: ' + subcommandError.message,
+                    ephemeral: true
+                });
+        }
+    } catch (outerError) {
+        console.error('Critical error in friendship-logs command:', outerError);
+        
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Erro crítico ao processar comando.',
+                    ephemeral: true
+                });
+            }
+        } catch (replyError) {
+            console.error('Could not send error reply:', replyError);
         }
     }
+}
 };
 
 

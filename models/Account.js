@@ -122,16 +122,50 @@ class Account {
 
     static async delete(id) {
         try {
-            
-            const friendships = await db.get('SELECT COUNT(*) as count FROM friendships WHERE account_id = ?', [id]);
+            console.log(`[DEBUG] Attempting to delete account ${id}`);
 
-            if (friendships.count > 0) {
-                throw new Error('Cannot delete account with existing friendships');
+            // Buscar informações da conta antes de deletar
+            const account = await this.findById(id);
+            if (!account) {
+                throw new Error('Account not found');
             }
 
+            // Primeiro, deletar todas as amizades relacionadas a esta conta
+            const friendships = await db.all('SELECT * FROM friendships WHERE account_id = ?', [id]);
+            console.log(`[DEBUG] Found ${friendships.length} friendships to delete`);
+
+            if (friendships.length > 0) {
+                // Deletar as amizades
+                await db.run('DELETE FROM friendships WHERE account_id = ?', [id]);
+                console.log(`[DEBUG] Deleted ${friendships.length} friendships for account ${id}`);
+            }
+
+            // Deletar os logs de amizade também (se existirem)
+            const friendshipLogs = await db.all('SELECT * FROM friendship_logs WHERE account_id = ?', [id]);
+            if (friendshipLogs.length > 0) {
+                await db.run('DELETE FROM friendship_logs WHERE account_id = ?', [id]);
+                console.log(`[DEBUG] Deleted ${friendshipLogs.length} friendship logs for account ${id}`);
+            }
+
+            // Verificar se há pedidos ativos usando esta conta
+            const activeOrders = await db.all(
+                'SELECT * FROM order_logs WHERE selected_account_id = ? AND status NOT IN (?, ?)',
+                [id, 'COMPLETED', 'REJECTED']
+            );
+
+            if (activeOrders.length > 0) {
+                console.warn(`[WARNING] Account ${id} has ${activeOrders.length} active orders. These orders may be affected.`);
+                // Opcional: você pode cancelar esses pedidos ou impedir a exclusão
+                // throw new Error(`Cannot delete account with ${activeOrders.length} active orders`);
+            }
+
+            // Agora deletar a conta
             const query = 'DELETE FROM accounts WHERE id = ?';
             const result = await db.run(query, [id]);
+
+            console.log(`[DEBUG] Account ${id} deleted successfully. Rows affected: ${result.changes}`);
             return result.changes > 0;
+
         } catch (error) {
             console.error('Error deleting account:', error);
             throw error;
@@ -241,7 +275,7 @@ class Account {
 
             const result = await db.all(query);
 
-            
+
             return result.map(row => ({
                 region: row.region || 'Sem região',
                 totalAccounts: row.total_accounts || 0,
@@ -291,7 +325,7 @@ class Account {
 
     static async getTopAccounts(limit = 10) {
         try {
-            
+
             const query = `
             SELECT 
                 a.id,
@@ -319,14 +353,14 @@ class Account {
             }));
         } catch (error) {
             console.error('Error getting top accounts by friends:', error);
-            
+
             return [];
         }
     }
 
     static async getTopAccountsAlternative(limit = 10) {
         try {
-            
+
             const query = `
             WITH account_stats AS (
                 SELECT 

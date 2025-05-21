@@ -2,6 +2,32 @@ const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 const config = require('../config.json');
 
 const commands = [
+
+    new SlashCommandBuilder()
+    .setName('fix-orders')
+    .setDescription('Corrige pedidos que ficaram travados')
+    .setDefaultMemberPermissions(0)
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('complete')
+            .setDescription('Marca um pedido específico como COMPLETED')
+            .addIntegerOption(option =>
+                option.setName('order_id')
+                    .setDescription('ID do pedido para completar')
+                    .setRequired(true)
+            )
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('list-pending')
+            .setDescription('Lista todos os pedidos que não estão COMPLETED')
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('bulk-complete')
+            .setDescription('Completa todos os pedidos AWAITING_ACCOUNT_SELECTION que já tiveram RP debitado')
+    ),
+
     new SlashCommandBuilder()
         .setName('send-panel')
         .setDescription('Envia o painel principal do shop')

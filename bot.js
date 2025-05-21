@@ -65,10 +65,10 @@ let friendshipNotificationService;
 
 
 client.once('ready', async () => {
-    
+
     console.log(`🚀 ${client.user.tag} está online!`);
 
-    
+
     try {
         await initializeDatabase();
         console.log('✅ Database initialized!');
@@ -77,20 +77,20 @@ client.once('ready', async () => {
         process.exit(1);
     }
 
-    
+
     catalogUpdater = new CatalogAutoUpdater(client);
     console.log('🔄 Catalog auto-updater initialized!');
 
-    
+
     friendshipNotificationService = new FriendshipNotificationService(client);
     await friendshipNotificationService.start();
     console.log('🔔 Friendship notification service initialized!');
     global.friendshipNotificationService = friendshipNotificationService;
 
-    
+
     setInterval(() => {
-        catalogUpdater.cleanupOldBackups(7); 
-    }, 24 * 60 * 60 * 1000); 
+        catalogUpdater.cleanupOldBackups(7);
+    }, 24 * 60 * 60 * 1000);
 });
 
 client.on('messageCreate', async message => {
@@ -115,16 +115,16 @@ client.on('messageCreate', async message => {
                 if (attachment && attachment.contentType && attachment.contentType.startsWith('image/')) {
                     console.log(`[DEBUG] Valid image attachment received: ${attachment.url}`);
 
-                    
+
                     await message.reply('✅ Comprovante de pagamento recebido! Nossa equipe irá analisar em breve.');
 
-                    
+
                     console.log(`[DEBUG] Updating order ${order.id} with payment proof...`);
 
                     let updateSuccess = false;
 
                     try {
-                        
+
                         updateSuccess = await Promise.race([
                             OrderLog.addPaymentProof(order.id, attachment.url),
                             new Promise((_, reject) =>
@@ -138,7 +138,7 @@ client.on('messageCreate', async message => {
                         console.error(`[ERROR] OrderLog.addPaymentProof failed:`, error);
                         console.log(`[DEBUG] Trying direct database update...`);
 
-                        
+
                         try {
                             const db = require('./database/connection');
                             const directResult = await db.run(
@@ -162,15 +162,15 @@ client.on('messageCreate', async message => {
                         return;
                     }
 
-                    
+
                     console.log(`[DEBUG] Sending order ${order.id} to admin approval...`);
 
                     try {
-                        
+
                         if (!OrderService || typeof OrderService.sendOrderToAdminApproval !== 'function') {
                             console.error(`[ERROR] OrderService not available, using manual notification`);
 
-                            
+
                             const adminChannelId = config.adminLogChannelId || config.approvalNeededChannelId || config.orderApprovalChannelId;
                             if (adminChannelId) {
                                 const adminChannel = await message.client.channels.fetch(adminChannelId);
@@ -206,14 +206,14 @@ client.on('messageCreate', async message => {
                             }
 
                         } else {
-                            
+
                             await OrderService.sendOrderToAdminApproval(message.client, order.id);
                             console.log(`[DEBUG] OrderService notification sent`);
                         }
 
                     } catch (adminError) {
                         console.error(`[ERROR] Admin notification failed:`, adminError);
-                        
+
                     }
 
                     console.log(`[DEBUG] Payment proof processing completed for order ${order.id}`);
@@ -234,8 +234,12 @@ client.on('messageCreate', async message => {
 client.on('interactionCreate', async (interaction) => {
     try {
         if (interaction.isChatInputCommand()) {
-            
+
             switch (interaction.commandName) {
+                case 'fix-orders':
+                    const fixOrdersCommand = require('./commands/slash/fix-orders');
+                    await fixOrdersCommand.execute(interaction);
+                    break;
                 case 'friendship-admin':
                     const friendshipAdminCommand = require('./commands/slash/friendship-admin');
                     await friendshipAdminCommand.execute(interaction);
@@ -262,13 +266,13 @@ client.on('interactionCreate', async (interaction) => {
                     console.log(`Unknown command: ${interaction.commandName}`);
             }
         } else if (interaction.isButton()) {
-            
+
             await buttonHandler.handle(interaction);
         } else if (interaction.isStringSelectMenu()) {
-            
+
             await selectMenuHandler.handle(interaction);
         } else if (interaction.isModalSubmit()) {
-            
+
             await modalHandler.handle(interaction);
         }
     } catch (error) {
@@ -290,7 +294,7 @@ client.on('interactionCreate', async (interaction) => {
 
 
 async function handleFriendshipNotificationCommand(interaction) {
-    
+
     if (!interaction.member.roles.cache.has(config.adminRoleId)) {
         return await interaction.reply({
             content: '❌ Você não tem permissão para usar este comando.',

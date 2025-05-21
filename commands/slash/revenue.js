@@ -28,7 +28,14 @@ module.exports = {
 
     async execute(interaction) {
         
-        if (!interaction.member.roles.cache.has(config.adminRoleId)) {
+        if (!interaction.member || !interaction.guild) {
+            return await interaction.reply({
+                content: '❌ Este comando só pode ser usado em um servidor.',
+                ephemeral: true
+            });
+        }
+
+                if (!interaction.member.roles.cache.has(config.adminRoleId)) {
             return await interaction.reply({
                 content: '❌ Você não tem permissão para usar este comando.',
                 ephemeral: true
